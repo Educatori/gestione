@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <title>Gestione Permessi - Turni, Orari, Assenze</title>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+  <!-- ===== FAVICON ===== -->
+<link rel="icon" href="icon-192.png" sizes="192x192" type="image/png">
+<link rel="icon" href="favicon.ico" sizes="any" type="image/x-icon">
+<link rel="apple-touch-icon" href="icon-192.png">
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 20px; background: #f0f2f5; }
+    .container { max-width: 1400px; margin: auto; background: white; border-radius: 12px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+    h1 { font-size: 1.4rem; margin-bottom: 0.5rem; }
+    .subtitle { font-size: 0.9rem; color: #666; margin: -0.4rem 0 1rem 0; font-style: italic; }
+
+    .toolbar { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; align-items: center; }
+    .toolbar button, .toolbar input { padding: 8px 12px; border-radius: 6px; border: 1px solid #ccc; font-size: 14px; }
+    .toolbar button { color: white; cursor: pointer; border: none; font-weight: 600; }
+    .toolbar button:hover { filter: brightness(1.1); }
+
+    /* Colori tasti (coerenti con gestione studenti.html) */
+    .btn-template { background: #28a745; }   /* verde */
+    .btn-template:hover { background: #218838; }
+    .btn-load     { background: #0078d4; }   /* azzurro */
+    .btn-load:hover { background: #005a9e; }
+    .btn-json     { background: #6c757d; }   /* grigio */
+    .btn-json:hover { background: #5a6268; }
+    .btn-js       { background: #e07c00; }   /* arancio */
+    .btn-js:hover { background: #bb6801; }
+    .btn-clear    { background: #dc3545; }   /* rosso */
+    .btn-clear:hover { background: #bd2130; }
+
+    .section { background: #fefefe; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 20px; padding: 15px; }
+    .section h3 { margin-top: 0; border-bottom: 2px solid #0078d4; display: inline-block; padding-bottom: 4px; }
+    textarea { width: 100%; font-family: monospace; font-size: 13px; padding: 10px; border: 1px solid #ccc; border-radius: 6px; background: #fafafa; }
+    .status { margin-top: 10px; font-size: 13px; padding: 6px 12px; border-radius: 6px; }
+    .status.success { background: #d4edda; color: #155724; }
+    .status.error   { background: #f8d7da; color: #721c24; }
+    .status.warn    { background: #fff3cd; color: #856404; }
+    .footer { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+    button.small { padding: 4px 8px; font-size: 12px; margin-left: 10px; }
+    .hint { font-size: 12px; color: #666; margin-top: 4px; font-style: italic; }
+    .info-excel { background: #eef7ff; border-left: 4px solid #0078d4; padding: 10px 14px; border-radius: 6px; margin-bottom: 15px; font-size: 0.85rem; }
+    .info-excel code { background: #dceefb; padding: 1px 5px; border-radius: 3px; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1>⚙️ Gestione Permessi</h1>
+  <p class="subtitle">Import / edit / export configurazioni turni, orari, assenze</p>
+
+  <div class="info-excel">
+    <b>📥 Formati accettati</b>:
+    <code>.xlsx</code> · <code>.xls</code> · <code>.json</code> · <code>.js</code>
+    (anche il file <code>permessi.js</code> esportato da questa pagina).<br>
+    <b>Da Excel</b>: un foglio per struttura. Nomi foglio riconosciuti:
+    <code>TURNI_DINNER</code>, <code>LAB_PRANZO</code>, <code>LAB_DINNER</code>,
+    <code>OVERRIDE_TURNI_DINNER</code>, <code>OVERRIDE_TURNI_DINNER_CLASSI</code>,
+    <code>ORARI_PP</code>, <code>ASSENTI_PERMESSO</code>, <code>CALENDARIO_GRUPPI_DINNER</code>.
+  </div>
+
+  <div class="toolbar">
+    <button id="templateBtn" class="btn-template" title="Scarica un file .xlsx con un foglio per ogni struttura">⬇️ Template</button>
+    <input type="file" id="fileInput" accept=".xlsx,.xls,.json,.js" />
+    <button id="loadBtn" class="btn-load">📂 Carica file</button>
+    <button id="exportJsonBtn" class="btn-json">💾 Esporta JSON</button>
+    <button id="exportJsBtn" class="btn-js">📜 Esporta JS</button>
+    <button id="clearBtn" class="btn-clear">🗑️ Pulisci</button>
+  </div>
+
+  <div class="section">
+    <h3>🥗 Laboratori Pranzo <button id="validateLabPranzo" class="small">✔️ Valida</button></h3>
+    <textarea id="labPranzo" rows="4" placeholder='{"1": ["3A","5A","5B"], "2": [...]}'></textarea>
+    <div class="hint">Formato Excel: foglio <code>LAB_PRANZO</code> → Turno | Classi (separate da virgola)</div>
+  </div>
+
+  <div class="section">
+    <h3>🍽 Turni Dinner <button id="validateTurniDinner" class="small">✔️ Valida</button></h3>
+    <textarea id="turniDinner" rows="4" placeholder='{"1": ["1A","1B"], "2": [...]}'></textarea>
+    <div class="hint">Formato Excel: foglio <code>TURNI_DINNER</code> → Turno | Classi</div>
+  </div>
+
+  <div class="section">
+    <h3>🍽 Laboratori Dinner <button id="validateLabDinner" class="small">✔️ Valida</button></h3>
+    <textarea id="labDinner" rows="4" placeholder='{"1": ["2P"], "2": ["2A"]}'></textarea>
+    <div class="hint">Formato Excel: foglio <code>LAB_DINNER</code> → Turno | Classi</div>
+  </div>
+
+  <div class="section">
+    <h3>🔄 Cambio Turni Dinner (individuale) <button id="validateOverride" class="small">✔️ Valida</button></h3>
+    <textarea id="overrideTurni" rows="8" placeholder='{"GASPARD": {"1": 2, "2": 2, "3": 2, "4": 2}}'></textarea>
+    <div class="hint">
+      Formato Excel: foglio <code>OVERRIDE_TURNI_DINNER</code> → Cognome | 1 | 2 | 3 | 4 | 5.<br>
+      <b>In online va caricato su Firebase</b> (<code>overrides_turni_dinner</code>), <b>in offline</b> in <code>permessi_26_offline.js</code>.
+    </div>
+  </div>
+
+  <div class="section">
+    <h3>🔄 Cambio Turni Dinner per classe <button id="validateOverrideClassi" class="small">✔️ Valida</button></h3>
+    <textarea id="overrideTurniClassi" rows="4" placeholder='{"1A": {"3": 2}, "1B": {"3": 2}}'></textarea>
+    <div class="hint">Formato Excel: foglio <code>OVERRIDE_TURNI_DINNER_CLASSI</code> → Classe | 1 | 2 | 3 | 4 | 5. Va in <code>config-static.js</code>.</div>
+  </div>
+
+  <div class="section">
+    <h3>🔑 Orari Permessi Permanenti <button id="validateOrari" class="small">✔️ Valida</button></h3>
+    <textarea id="orariPP" rows="12" placeholder='{"ROSSI": {"1": {"out":"12:00","in":"20:45"}}}'></textarea>
+    <div class="hint">Formato Excel: foglio <code>ORARI_PP</code> → Cognome | Giorno | Out | In (una riga per giorno).<br>
+      <b>In online va su Firebase</b> (<code>permessi_pp</code>).</div>
+  </div>
+
+  <div class="section">
+    <h3>🚫 Assenti con Permesso <button id="validateAssenti" class="small">✔️ Valida</button></h3>
+    <textarea id="assentiPermesso" rows="6" placeholder='{"1": ["ROSSI","BIANCHI"], "2": ["VERDI"]}'></textarea>
+    <div class="hint">Formato Excel: foglio <code>ASSENTI_PERMESSO</code> → Giorno | Cognomi (separati da virgola).<br>
+      <b>In online va su Firebase</b> (<code>assenti_permesso</code>).</div>
+  </div>
+
+  <div class="section">
+    <h3>📅 Calendario Laboratori Dinner <button id="validateCalendario" class="small">✔️ Valida</button></h3>
+    <textarea id="calendarioGruppi" rows="8" placeholder='{"10/09/2026": "gr1"}'></textarea>
+    <div class="hint">Formato Excel: foglio <code>CALENDARIO_GRUPPI_DINNER</code> → Data | Gruppo. Va in <code>config-static.js</code>.</div>
+  </div>
+
+  <div class="footer">
+    <span id="statusMsg" class="status"></span>
+  </div>
+</div>
+
+<script>
+/* ────────────────────────────────────────────────────────────
+   RIFERIMENTI
+   ──────────────────────────────────────────────────────────── */
+const sections = {
+  labPranzo:            'LAB_PRANZO',
+  turniDinner:          'TURNI_DINNER',
+  labDinner:            'LAB_DINNER',
+  overrideTurni:        'OVERRIDE_TURNI_DINNER',
+  overrideTurniClassi:  'OVERRIDE_TURNI_DINNER_CLASSI',
+  orariPP:              'ORARI_PP',
+  assentiPermesso:      'ASSENTI_PERMESSO',
+  calendarioGruppi:     'CALENDARIO_GRUPPI_DINNER'
+};
+
+function showStatus(msg, type = 'success') {
+  const el = document.getElementById('statusMsg');
+  el.textContent = msg;
+  el.className = `status ${type}`;
+  clearTimeout(showStatus._t);
+  showStatus._t = setTimeout(() => { el.className = 'status'; }, 5000);
+}
+
+/* ────────────────────────────────────────────────────────────
+   VALIDAZIONE JSON
+   ──────────────────────────────────────────────────────────── */
+function getValidatedObject(textareaId, sectionName) {
+  try {
+    return JSON.parse(document.getElementById(textareaId).value || '{}');
+  } catch (e) {
+    showStatus(`❌ JSON non valido in ${sectionName}: ${e.message}`, 'error');
+    return null;
+  }
+}
+
+function getAllData() {
+  const result = {};
+  for (const [id, key] of Object.entries(sections)) {
+    const obj = getValidatedObject(id, key);
+    if (obj === null) return null;
+    result[key] = obj;
+  }
+  return result;
+}
+
+/* ────────────────────────────────────────────────────────────
+   PARSER EXCEL
+   ──────────────────────────────────────────────────────────── */
+function normKey(s) {
+  return String(s || '').toLowerCase().normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '').trim();
+}
+
+function getCell(row, headers, ...aliases) {
+  for (const alias of aliases) {
+    const idx = headers.indexOf(normKey(alias));
+    if (idx !== -1) return row[idx];
+  }
+  return '';
+}
+
+function parseTurnoClassi(headers, rows) {
+  const result = {};
+  for (const r of rows) {
+    const turno = String(getCell(r, headers, 'turno', 'shift', 'n') || '').trim();
+    if (!turno) continue;
+    let classi = getCell(r, headers, 'classi', 'classe', 'classes', 'class');
+    classi = String(classi || '').split(/[,;\n]/).map(s => s.trim()).filter(Boolean);
+    if (!result[turno]) result[turno] = [];
+    result[turno].push(...classi);
+  }
+  for (const k of Object.keys(result)) result[k] = [...new Set(result[k])];
+  return result;
+}
+
+function parseOverrideGiorni(headers, rows) {
+  const result = {};
+  const giorni = ['1','2','3','4','5'];
+  for (const r of rows) {
+    const nome = String(getCell(r, headers, 'cognome', 'classe', 'name', 'surname', 'studente') || '').trim();
+    if (!nome) continue;
+    const giorniObj = {};
+    giorni.forEach(g => {
+      const val = getCell(r, headers, g, `giorno${g}`, `day${g}`, `g${g}`);
+      if (val !== '' && val != null) giorniObj[g] = Number(val);
+    });
+    if (Object.keys(giorniObj).length) result[nome.toUpperCase()] = giorniObj;
+  }
+  return result;
+}
+
+function parseOrariPP(headers, rows) {
+  const result = {};
+  for (const r of rows) {
+    const cognome = String(getCell(r, headers, 'cognome', 'surname', 'studente') || '').trim().toUpperCase();
+    const giorno  = String(getCell(r, headers, 'giorno', 'day') || '').trim();
+    const out     = String(getCell(r, headers, 'out', 'uscita') || '').trim();
+    const inn     = String(getCell(r, headers, 'in', 'entrata', 'rientro') || '').trim();
+    if (!cognome || !giorno) continue;
+    if (!result[cognome]) result[cognome] = {};
+    result[cognome][giorno] = { out, in: inn };
+  }
+  return result;
+}
+
+function parseAssenti(headers, rows) {
+  const result = {};
+  for (const r of rows) {
+    const giorno = String(getCell(r, headers, 'giorno', 'day') || '').trim();
+    if (!giorno) continue;
+    let nomi = getCell(r, headers, 'cognomi', 'cognome', 'nomi', 'studenti');
+    nomi = String(nomi || '').split(/[,;\n]/).map(s => s.trim().toUpperCase()).filter(Boolean);
+    if (!result[giorno]) result[giorno] = [];
+    result[giorno].push(...nomi);
+  }
+  for (const k of Object.keys(result)) result[k] = [...new Set(result[k])];
+  return result;
+}
+
+function parseCalendario(headers, rows) {
+  const result = {};
+  for (const r of rows) {
+    const data   = String(getCell(r, headers, 'data', 'date') || '').trim();
+    const gruppo = String(getCell(r, headers, 'gruppo', 'group', 'gr') || '').trim();
+    if (data && gruppo) result[data] = gruppo;
+  }
+  return result;
+}
+
+/* ────────────────────────────────────────────────────────────
+   IMPORTA EXCEL (multi-foglio)
+   ──────────────────────────────────────────────────────────── */
+function loadExcelFile(file) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+      const fogliRiconosciuti = [];
+      const fogliIgnorati = [];
+
+      const MAP = {
+        'lab_pranzo':                    'labPranzo',
+        'turni_dinner':                  'turniDinner',
+        'lab_dinner':                    'labDinner',
+        'override_turni_dinner':         'overrideTurni',
+        'override_turni_dinner_classi':  'overrideTurniClassi',
+        'orari_pp':                      'orariPP',
+        'assenti_permesso':              'assentiPermesso',
+        'calendario_gruppi_dinner':      'calendarioGruppi'
+      };
+
+      for (const sheetName of wb.SheetNames) {
+        const key = normKey(sheetName);
+        const textareaId = MAP[key];
+        if (!textareaId) { fogliIgnorati.push(sheetName); continue; }
+
+        const sheet = wb.Sheets[sheetName];
+        const righe = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+        if (righe.length < 2) { fogliIgnorati.push(sheetName + ' (vuoto)'); continue; }
+
+        const headers = righe[0].map(h => String(h || ''));
+        const rows = righe.slice(1).filter(r => r.some(v => v !== '' && v != null));
+
+        let parsed = null;
+        if (['lab_pranzo','turni_dinner','lab_dinner'].includes(key)) {
+          parsed = parseTurnoClassi(headers, rows);
+        } else if (['override_turni_dinner','override_turni_dinner_classi'].includes(key)) {
+          parsed = parseOverrideGiorni(headers, rows);
+        } else if (key === 'orari_pp') {
+          parsed = parseOrariPP(headers, rows);
+        } else if (key === 'assenti_permesso') {
+          parsed = parseAssenti(headers, rows);
+        } else if (key === 'calendario_gruppi_dinner') {
+          parsed = parseCalendario(headers, rows);
+        }
+
+        document.getElementById(textareaId).value = JSON.stringify(parsed, null, 2);
+        fogliRiconosciuti.push(sheetName);
+      }
+
+      let msg = `✅ Importati ${fogliRiconosciuti.length} fogli: ${fogliRiconosciuti.join(', ')}.`;
+      if (fogliIgnorati.length) msg += ` — ignorati: ${fogliIgnorati.join(', ')}.`;
+      showStatus(msg, 'success');
+
+    } catch (err) {
+      console.error(err);
+      showStatus(`❌ Errore lettura Excel: ${err.message}`, 'error');
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+/* ────────────────────────────────────────────────────────────
+   PARSER JS (formato "window.KEY = {...}" / "const KEY = {...}")
+   ──────────────────────────────────────────────────────────── */
+function parsePermessiJS(content) {
+  const result = {};
+  const keys = [...new Set(Object.values(sections))];
+
+  for (const key of keys) {
+    const regex = new RegExp(`(?:window\\.|const\\s+|let\\s+|var\\s+)${key}\\s*=\\s*\\{`);
+    const match = content.match(regex);
+    if (!match) continue;
+
+    const start = match.index + match[0].length - 1;
+
+    let depth = 0, end = -1, inString = false, stringChar = '', escaped = false;
+    for (let i = start; i < content.length; i++) {
+      const c = content[i];
+      if (inString) {
+        if (escaped) { escaped = false; continue; }
+        if (c === '\\') { escaped = true; continue; }
+        if (c === stringChar) inString = false;
+        continue;
+      }
+      if (c === '"' || c === "'") { inString = true; stringChar = c; continue; }
+      if (c === '{') depth++;
+      if (c === '}') { depth--; if (depth === 0) { end = i; break; } }
+    }
+    if (end === -1) continue;
+
+    try {
+      result[key] = JSON.parse(content.substring(start, end + 1));
+    } catch (e) {
+      console.warn(`Parse error per ${key}:`, e);
+    }
+  }
+  return result;
+}
+
+/* ────────────────────────────────────────────────────────────
+   LOADER UNIFICATO (JSON / JS / EXCEL)
+   ──────────────────────────────────────────────────────────── */
+function loadDataIntoUI(data) {
+  let count = 0;
+  for (const [id, key] of Object.entries(sections)) {
+    if (data[key] !== undefined) {
+      document.getElementById(id).value = JSON.stringify(data[key], null, 2);
+      count++;
+    }
+  }
+  if (count === 0) {
+    showStatus('⚠️ Nessuna struttura riconosciuta nel file.', 'warn');
+  } else {
+    showStatus(`✅ Caricate ${count} strutture da file.`, 'success');
+  }
+}
+
+function loadAnyFile(file) {
+  const ext = file.name.toLowerCase().split('.').pop();
+
+  if (ext === 'json') {
+    showStatus(`⏳ Lettura di "${file.name}"…`, 'warn');
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = JSON.parse(e.target.result);
+        loadDataIntoUI(data);
+      } catch (err) {
+        showStatus(`❌ JSON non valido: ${err.message}`, 'error');
+      }
+    };
+    reader.readAsText(file);
+    return;
+  }
+
+  if (ext === 'js') {
+    showStatus(`⏳ Lettura di "${file.name}"…`, 'warn');
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = parsePermessiJS(e.target.result);
+        if (Object.keys(data).length === 0) {
+          throw new Error('Nessuna struttura riconosciuta (attese "window.KEY = {...}" o "const KEY = {...}").');
+        }
+        loadDataIntoUI(data);
+      } catch (err) {
+        showStatus(`❌ Errore JS: ${err.message}`, 'error');
+      }
+    };
+    reader.readAsText(file);
+    return;
+  }
+
+  showStatus(`⏳ Lettura di "${file.name}"…`, 'warn');
+  loadExcelFile(file);
+}
+
+/* ────────────────────────────────────────────────────────────
+   EXPORT
+   ──────────────────────────────────────────────────────────── */
+function exportAsJSON() {
+  const data = getAllData();
+  if (!data) return;
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'permessi.json'; a.click();
+  URL.revokeObjectURL(url);
+  showStatus('📁 Esportato permessi.json', 'success');
+}
+
+function exportAsJS() {
+  const data = getAllData();
+  if (!data) return;
+  let js = `/**\n * Configurazioni permessi - generato da gestione permessi.html\n * Data: ${new Date().toLocaleString('it-IT')}\n */\n\n`;
+
+  const STATICHE = ['LAB_PRANZO','TURNI_DINNER','LAB_DINNER','OVERRIDE_TURNI_DINNER_CLASSI','CALENDARIO_GRUPPI_DINNER'];
+  const PERSONALI = ['OVERRIDE_TURNI_DINNER','ORARI_PP','ASSENTI_PERMESSO'];
+
+  js += `/* ─── STATICHE (per js/core/config-static.js) ─── */\n`;
+  STATICHE.forEach(k => {
+    js += `window.${k} = ${JSON.stringify(data[k], null, 2)};\n\n`;
+  });
+  js += `/* ─── PERSONALI (per Firebase / offline) ─── */\n`;
+  PERSONALI.forEach(k => {
+    js += `const ${k} = ${JSON.stringify(data[k], null, 2)};\nwindow.${k} = ${k};\n\n`;
+  });
+
+  const blob = new Blob([js], { type: 'text/javascript;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'permessi.js'; a.click();
+  URL.revokeObjectURL(url);
+  showStatus('📜 Esportato permessi.js (ricaricabile con 📂 Carica file)', 'success');
+}
+
+/* ────────────────────────────────────────────────────────────
+   TEMPLATE EXCEL
+   ──────────────────────────────────────────────────────────── */
+function creaFoglioTemplate(wb, nomeFoglio, righe) {
+  const ws = XLSX.utils.aoa_to_sheet(righe);
+  ws['!cols'] = righe[0].map(h => ({ wch: Math.max(14, String(h).length + 4) }));
+  XLSX.utils.book_append_sheet(wb, ws, nomeFoglio);
+}
+
+function generaTemplatePermessi() {
+  const wb = XLSX.utils.book_new();
+
+  creaFoglioTemplate(wb, 'TURNI_DINNER', [
+    ['Turno', 'Classi'],
+    [1, '1A, 1B, 1P, 2A, 2B, 2P, 3P'],
+    [2, '3A, 3B, 4A, 4B, 4C, 5A, 5B']
+  ]);
+
+  creaFoglioTemplate(wb, 'LAB_PRANZO', [
+    ['Turno', 'Classi'],
+    [1, '3A, 5A, 5B'],
+    [2, '3B, 4A'],
+    [3, '1A, 4B'],
+    [4, '1B, 4C']
+  ]);
+
+  creaFoglioTemplate(wb, 'LAB_DINNER', [
+    ['Turno', 'Classi'],
+    [1, '2P'],
+    [2, '2A'],
+    [3, '2B'],
+    [4, '5A, 5B']
+  ]);
+
+  creaFoglioTemplate(wb, 'OVERRIDE_TURNI_DINNER', [
+    ['Cognome', 1, 2, 3, 4, 5],
+    ['ROSSI',    2, 2, 2, 2, ''],
+    ['BIANCHI',  1, 1, 1, 1, ''],
+    ['VERDI',    2, 2, 2, 2, '']
+  ]);
+
+  creaFoglioTemplate(wb, 'OVERRIDE_TURNI_DINNER_CLASSI', [
+    ['Classe', 1, 2, 3, 4, 5],
+    ['1A', '', '', 2, '', ''],
+    ['1B', '', '', 2, '', '']
+  ]);
+
+  creaFoglioTemplate(wb, 'ORARI_PP', [
+    ['Cognome', 'Giorno', 'Out', 'In'],
+    ['ROSSI',    1, '12:00', '20:45'],
+    ['ROSSI',    2, '17:00', '18:45'],
+    ['ROSSI',    3, '18:15', '19:15'],
+    ['ROSSI',    4, '20:15', '21:30'],
+    ['BIANCHI',  1, '23:00', '05:00'],
+    ['BIANCHI',  2, '22:00', '06:00']
+  ]);
+
+  creaFoglioTemplate(wb, 'ASSENTI_PERMESSO', [
+    ['Giorno', 'Cognomi'],
+    [1, 'ROSSI, BIANCHI'],
+    [2, 'VERDI']
+  ]);
+
+  creaFoglioTemplate(wb, 'CALENDARIO_GRUPPI_DINNER', [
+    ['Data', 'Gruppo'],
+    ['10/09/2026', 'gr1'],
+    ['17/09/2026', 'gr2'],
+    ['24/09/2026', 'gr1']
+  ]);
+
+  XLSX.writeFile(wb, 'template_permessi.xlsx');
+  showStatus('⬇️ Template permessi scaricato (template_permessi.xlsx).', 'success');
+}
+
+/* ────────────────────────────────────────────────────────────
+   VALIDATORI
+   ──────────────────────────────────────────────────────────── */
+function addValidator(textareaId, sectionName, buttonId) {
+  const btn = document.getElementById(buttonId);
+  if (!btn) return;
+  btn.addEventListener('click', () => {
+    const obj = getValidatedObject(textareaId, sectionName);
+    if (obj !== null) showStatus(`✅ ${sectionName} OK (${Object.keys(obj).length} chiavi).`, 'success');
+  });
+}
+
+/* ────────────────────────────────────────────────────────────
+   EVENTI
+   ──────────────────────────────────────────────────────────── */
+document.getElementById('templateBtn').addEventListener('click', generaTemplatePermessi);
+
+document.getElementById('loadBtn').addEventListener('click', () => {
+  const f = document.getElementById('fileInput').files[0];
+  if (!f) { showStatus('⚠️ Seleziona un file prima di caricare.', 'warn'); return; }
+  loadAnyFile(f);
+});
+document.getElementById('fileInput').addEventListener('change', (e) => {
+  if (e.target.files[0]) loadAnyFile(e.target.files[0]);
+});
+
+document.getElementById('exportJsonBtn').addEventListener('click', exportAsJSON);
+document.getElementById('exportJsBtn').addEventListener('click', exportAsJS);
+
+document.getElementById('clearBtn').addEventListener('click', () => {
+  if (!confirm('Svuotare tutte le sezioni?')) return;
+  for (const id of Object.keys(sections)) document.getElementById(id).value = '';
+  showStatus('🗑️ Sezioni svuotate.', 'success');
+});
+
+addValidator('labPranzo',           'LAB_PRANZO',            'validateLabPranzo');
+addValidator('turniDinner',         'TURNI_DINNER',          'validateTurniDinner');
+addValidator('labDinner',           'LAB_DINNER',            'validateLabDinner');
+addValidator('overrideTurni',       'OVERRIDE_TURNI_DINNER', 'validateOverride');
+addValidator('overrideTurniClassi', 'OVERRIDE_TURNI_DINNER_CLASSI', 'validateOverrideClassi');
+addValidator('orariPP',             'ORARI_PP',              'validateOrari');
+addValidator('assentiPermesso',     'ASSENTI_PERMESSO',      'validateAssenti');
+addValidator('calendarioGruppi',    'CALENDARIO_GRUPPI_DINNER', 'validateCalendario');
+
+showStatus('📂 Pronto. Scarica il template, importa Excel / JSON / JS.', 'success');
+</script>
+</body>
+</html>

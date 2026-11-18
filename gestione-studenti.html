@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gestione Studenti</title>
+
+  <!-- SheetJS: parsing .xlsx / .xls / .csv e generazione template -->
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+<!-- ===== FAVICON ===== -->
+<link rel="icon" href="icon-192.png" sizes="192x192" type="image/png">
+<link rel="icon" href="favicon.ico" sizes="any" type="image/x-icon">
+<link rel="apple-touch-icon" href="icon-192.png">
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: 'Segoe UI', system-ui, sans-serif; margin: 20px; background: #fffeea; }
+    .container { max-width: 1400px; margin: auto; background: #fff7fb; border-radius: 12px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+    h1 { font-size: 1.4rem; margin: 0 0 1rem 0; }
+    .subtitle { font-size: 0.9rem; color: #666; margin: -0.6rem 0 1rem 0; font-style: italic; }
+
+    .toolbar { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; align-items: center; }
+    .toolbar input, .toolbar button { padding: 8px 12px; border-radius: 6px; border: 1px solid #ccc; font-size: 14px; }
+      .toolbar button { color: white; cursor: pointer; border: none; font-weight: 600; }
+  
+
+    /* Colori tasti (specificità corretta) */
+    .toolbar button.btn-template { background: #28a745; }   /* verde */
+    .toolbar button.btn-template:hover { background: #218838; }
+    .toolbar button.btn-load     { background: #0078d4; }   /* azzurro */
+    .toolbar button.btn-load:hover { background: #005a9e; }
+    .toolbar button.btn-json     { background: #6c757d; }   /* grigio */
+    .toolbar button.btn-json:hover { background: #5a6268; }
+    .toolbar button.btn-js       { background: #e07c00; }   /* arancio */
+    .toolbar button.btn-js:hover { background: #bb6801; }
+    .toolbar button.btn-clear    { background: #dc3545; }   /* rosso */
+    .toolbar button.btn-clear:hover { background: #bd2130; }
+    
+    
+    .info-panel { background: #f8f9fa; border-left: 4px solid #ff8c00; padding: 10px 14px; border-radius: 6px; margin-bottom: 12px; font-size: 0.85rem; }
+    .info-panel code { background: #e9ecef; padding: 1px 5px; border-radius: 3px; }
+
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { border: 1px solid #ddd; padding: 6px 8px; text-align: left; white-space: nowrap; }
+    th { background: #f0f0f0; position: sticky; top: 0; }
+    th.sortable { cursor: pointer; user-select: none; }
+    th.sortable:hover { background: #e0e0e0; }
+    th.sortable::after { content: ' ⇅'; opacity: 0.4; font-size: 11px; }
+    th.sort-asc::after { content: ' ▲'; opacity: 1; }
+    th.sort-desc::after { content: ' ▼'; opacity: 1; }
+
+    td input { width: 100%; min-width: 70px; border: 1px solid #ccc; border-radius: 4px; padding: 4px 6px; font-size: 13px; }
+    .id-col { width: 60px; text-align: center; }
+    .classe-col, .room-col, .percorso-col, .gruppo-col { width: 90px; }
+
+    .footer { margin-top: 14px; font-size: 13px; font-weight: bold; color: #0078d4; }
+    .badge { background: #e9ecef; padding: 3px 10px; border-radius: 20px; font-size: 12px; margin-left: 8px; }
+    .drop-zone { border: 2px dashed #ccc; border-radius: 8px; padding: 20px; text-align: center; color: #888; margin-bottom: 12px; cursor: pointer; transition: all 0.2s; }
+    .drop-zone.dragover { border-color: #0078d4; background: #eef7ff; color: #0078d4; }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <h1>📊 Gestione Studenti</h1>
+  <p class="subtitle">Popolamento dati da Excel / JSON a JS / JSON</p>
+
+  <div class="info-panel">
+    <b>Formati accettati</b>:
+    <code>.xlsx</code> · <code>.xls</code> · <code>.csv</code> · <code>.json</code> · <code>.js</code>
+    (<code>window.tuttiStudenti = [...]</code> o <code>const tuttiStudenti = [...]</code>).<br>
+    <b>Colonne riconosciute</b> (case-insensitive):
+    <code>ID</code> · <code>Cognome</code> · <code>Nome</code> · <code>Classe</code> · <code>Room</code> · <code>Percorso</code> · <code>Gruppo</code>.<br>
+    Ogni cella della tabella è modificabile: dopo le correzioni puoi riesportare in JSON o JS.
+  </div>
+
+  <div class="toolbar">
+    <button id="templateBtn" class="btn-template" title="Scarica un file .xlsx di esempio con le colonne corrette">⬇️ Template</button>
+    <input type="file" id="fileInput" accept=".xlsx,.xls,.csv,.json,.js" />
+    <button id="loadBtn" class="btn-load">📂 Carica file</button>
+    <input type="text" id="searchInput" placeholder="Filtra per ID, cognome, nome, classe..."
+           style="flex: 2; min-width: 200px;" />
+    <button id="exportJsonBtn" class="btn-json" disabled>💾 Esporta JSON</button>
+    <button id="exportJsBtn" class="btn-js" disabled>📜 Esporta JS</button>
+    <button id="clearBtn" class="btn-clear">🗑️ Pulisci</button>
+    <span id="countBadge" class="badge">0 studenti</span>
+  </div>
+
+  <div id="dropZone" class="drop-zone">
+    📁 Trascina qui un file <b>.xlsx</b>, <b>.xls</b>, <b>.csv</b>, <b>.json</b> o <b>.js</b>
+  </div>
+
+  <div style="overflow-x: auto; max-height: 70vh;">
+    <table id="studentiTable">
+      <thead>
+        <tr>
+          <th class="id-col sortable" data-sort="id">ID</th>
+          <th class="sortable" data-sort="cognome">Cognome</th>
+          <th class="sortable" data-sort="nome">Nome</th>
+          <th class="classe-col sortable" data-sort="classe">Classe</th>
+          <th class="room-col sortable" data-sort="room">Room</th>
+          <th class="percorso-col sortable" data-sort="percorso">Percorso</th>
+          <th class="gruppo-col sortable" data-sort="gruppo">Gruppo</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody"></tbody>
+    </table>
+  </div>
+
+  <div class="footer">
+    <span id="statusMsg">📂 Carica un file per cominciare.</span>
+  </div>
+</div>
+
+<script>
+/* ─────────────────────────────────────────────────────────────
+   STATO
+   ───────────────────────────────────────────────────────────── */
+let studenti = [];
+let filtered = [];
+let currentSortField = 'cognome';
+let currentSortAsc = true;
+
+/* ─────────────────────────────────────────────────────────────
+   RIFERIMENTI DOM
+   ───────────────────────────────────────────────────────────── */
+const fileInput     = document.getElementById('fileInput');
+const loadBtn       = document.getElementById('loadBtn');
+const searchInput   = document.getElementById('searchInput');
+const exportJsonBtn = document.getElementById('exportJsonBtn');
+const exportJsBtn   = document.getElementById('exportJsBtn');
+const clearBtn      = document.getElementById('clearBtn');
+const countBadge    = document.getElementById('countBadge');
+const dropZone      = document.getElementById('dropZone');
+const tableBody     = document.getElementById('tableBody');
+const statusMsg     = document.getElementById('statusMsg');
+const templateBtn   = document.getElementById('templateBtn');
+
+/* ─────────────────────────────────────────────────────────────
+   UTILITÀ: normalizza intestazioni Excel
+   ───────────────────────────────────────────────────────────── */
+function normKey(s) {
+  return String(s || '')
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, '')
+    .replace(/[^a-z0-9]/g, '');
+}
+
+const COLONNE_RICONOSCIUTE = {
+  'id': 'id', 'matricola': 'id', 'numeroid': 'id', 'n': 'id',
+  'cognome': 'cognome', 'surname': 'cognome', 'lastname': 'cognome',
+  'nome': 'nome', 'name': 'nome', 'firstname': 'nome',
+  'classe': 'classe', 'class': 'classe', 'sezione': 'classe',
+  'room': 'room', 'camera': 'room', 'stanza': 'room', 'nroom': 'room',
+  'percorso': 'percorso', 'path': 'percorso', 'indirizzo': 'percorso',
+  'gruppo': 'gruppo', 'group': 'gruppo', 'team': 'gruppo'
+};
+
+function mapHeader(h) {
+  return COLONNE_RICONOSCIUTE[normKey(h)] || null;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   PARSER EXCEL (SheetJS)
+   ───────────────────────────────────────────────────────────── */
+function parseExcelArrayBuffer(buffer) {
+  const data = new Uint8Array(buffer);
+  const workbook = XLSX.read(data, { type: 'array' });
+
+  const sheetName = workbook.SheetNames[0];
+  const sheet = workbook.Sheets[sheetName];
+
+  const righe = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+  if (righe.length < 2) throw new Error('Il foglio è vuoto o contiene solo intestazioni.');
+
+  const intestazioni = righe[0];
+  const mappaColonne = intestazioni.map(mapHeader);
+  const colonneRiconosciute = mappaColonne.filter(Boolean);
+  if (colonneRiconosciute.length === 0) {
+    throw new Error('Nessuna colonna riconosciuta. Attese: ID, Cognome, Nome, Classe, Room, Percorso, Gruppo.');
+  }
+
+  const nuoviStudenti = [];
+  const righeScartate = [];
+
+  for (let r = 1; r < righe.length; r++) {
+    const riga = righe[r];
+    if (!riga || riga.every(v => v === '' || v == null)) continue;
+
+    const obj = {};
+    let valida = false;
+
+    mappaColonne.forEach((chiave, i) => {
+      if (!chiave) return;
+      let valore = riga[i];
+      if (valore == null) valore = '';
+      valore = String(valore).trim();
+
+      if (chiave === 'id') {
+        const num = Number(valore);
+        if (!isNaN(num) && valore !== '') {
+          obj.id = num;
+          valida = true;
+        }
+      } else {
+        obj[chiave] = valore;
+        if (chiave === 'cognome' && valore !== '') valida = true;
+      }
+    });
+
+    if (valida) {
+      nuoviStudenti.push({
+        id:       obj.id ?? '',
+        cognome:  obj.cognome ?? '',
+        nome:     obj.nome ?? '',
+        classe:   obj.classe ?? '',
+        room:     obj.room ?? '',
+        percorso: obj.percorso ?? '',
+        gruppo:   obj.gruppo ?? ''
+      });
+    } else {
+      righeScartate.push(r + 1);
+    }
+  }
+
+  if (nuoviStudenti.length === 0) throw new Error('Nessuno studente valido trovato nel foglio.');
+  return { studenti: nuoviStudenti, sheetName, righeScartate };
+}
+
+/* ─────────────────────────────────────────────────────────────
+   PARSER JSON / JS
+   ───────────────────────────────────────────────────────────── */
+function parseJsonOrJsText(content) {
+  const primo = content.indexOf('[');
+  const ultimo = content.lastIndexOf(']');
+  if (primo === -1 || ultimo === -1 || ultimo < primo) {
+    throw new Error('Nessun array JSON trovato nel file.');
+  }
+
+  let arr;
+  try {
+    arr = JSON.parse(content.substring(primo, ultimo + 1));
+  } catch (e) {
+    throw new Error('JSON non valido: ' + e.message);
+  }
+  if (!Array.isArray(arr)) throw new Error('Il contenuto non è un array.');
+
+  return arr.map(s => ({
+    id:       s.id ?? '',
+    cognome:  s.cognome ?? '',
+    nome:     s.nome ?? '',
+    classe:   s.classe ?? '',
+    room:     s.room ?? '',
+    percorso: s.percorso ?? '',
+    gruppo:   s.gruppo ?? ''
+  }));
+}
+
+/* ─────────────────────────────────────────────────────────────
+   CARICAMENTO FILE (dispatch per estensione)
+   ───────────────────────────────────────────────────────────── */
+function loadFile(file) {
+  const ext = file.name.toLowerCase().split('.').pop();
+
+  if (ext === 'json' || ext === 'js') {
+    statusMsg.innerText = `⏳ Lettura di "${file.name}"…`;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const nuovi = parseJsonOrJsText(e.target.result);
+        if (nuovi.length === 0) throw new Error('Array vuoto.');
+        studenti = nuovi;
+        exportJsonBtn.disabled = false;
+        exportJsBtn.disabled = false;
+        applyFilter();
+        statusMsg.innerText = `✅ Caricati ${studenti.length} studenti da "${file.name}".`;
+      } catch (err) {
+        console.error(err);
+        statusMsg.innerText = `❌ Errore: ${err.message}`;
+        studenti = [];
+        filtered = [];
+        exportJsonBtn.disabled = true;
+        exportJsBtn.disabled = true;
+        renderTable();
+        updateCount();
+      }
+    };
+    reader.onerror = () => { statusMsg.innerText = '❌ Errore nella lettura del file.'; };
+    reader.readAsText(file);
+    return;
+  }
+
+  statusMsg.innerText = `⏳ Lettura di "${file.name}"…`;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const { studenti: nuovi, sheetName, righeScartate } = parseExcelArrayBuffer(e.target.result);
+      studenti = nuovi;
+      exportJsonBtn.disabled = false;
+      exportJsBtn.disabled = false;
+      applyFilter();
+
+      let msg = `✅ Caricati ${studenti.length} studenti da "${file.name}" (foglio: ${sheetName}).`;
+      if (righeScartate.length > 0) {
+        msg += ` ⚠️ Righe scartate: ${righeScartate.length} (${righeScartate.slice(0, 5).join(', ')}${righeScartate.length > 5 ? '…' : ''})`;
+      }
+      statusMsg.innerText = msg;
+    } catch (err) {
+      console.error(err);
+      statusMsg.innerText = `❌ Errore: ${err.message}`;
+      studenti = [];
+      filtered = [];
+      exportJsonBtn.disabled = true;
+      exportJsBtn.disabled = true;
+      renderTable();
+      updateCount();
+    }
+  };
+  reader.onerror = () => { statusMsg.innerText = '❌ Errore nella lettura del file.'; };
+  reader.readAsArrayBuffer(file);
+}
+
+/* ─────────────────────────────────────────────────────────────
+   FILTRO / ORDINAMENTO / RENDER
+   ───────────────────────────────────────────────────────────── */
+function sortData(arr) {
+  return arr.sort((a, b) => {
+    let va = a[currentSortField] ?? '';
+    let vb = b[currentSortField] ?? '';
+
+    if (currentSortField === 'id') {
+      const na = Number(va), nb = Number(vb);
+      if (!isNaN(na) && !isNaN(nb)) return currentSortAsc ? na - nb : nb - na;
+    }
+
+    va = String(va).toLowerCase();
+    vb = String(vb).toLowerCase();
+    if (va < vb) return currentSortAsc ? -1 : 1;
+    if (va > vb) return currentSortAsc ? 1 : -1;
+    return 0;
+  });
+}
+
+function applyFilter() {
+  const term = searchInput.value.trim().toLowerCase();
+
+  if (!term) {
+    filtered = [...studenti];
+  } else {
+    filtered = studenti.filter(s =>
+      String(s.id ?? '').includes(term) ||
+      (s.cognome && s.cognome.toLowerCase().includes(term)) ||
+      (s.nome    && s.nome.toLowerCase().includes(term))    ||
+      (s.classe  && s.classe.toLowerCase().includes(term))  ||
+      (s.room    && String(s.room).toLowerCase().includes(term))
+    );
+  }
+
+  sortData(filtered);
+  renderTable();
+  updateCount();
+  updateSortIndicators();
+}
+
+function updateCount() {
+  const visibili = filtered.length;
+  const totali   = studenti.length;
+  countBadge.innerText = visibili === totali
+    ? `${totali} student${totali === 1 ? 'e' : 'i'}`
+    : `${visibili} / ${totali} student${totali === 1 ? 'e' : 'i'}`;
+}
+
+function updateSortIndicators() {
+  document.querySelectorAll('th.sortable').forEach(th => {
+    th.classList.remove('sort-asc', 'sort-desc');
+    if (th.getAttribute('data-sort') === currentSortField) {
+      th.classList.add(currentSortAsc ? 'sort-asc' : 'sort-desc');
+    }
+  });
+}
+
+function renderTable() {
+  tableBody.innerHTML = '';
+
+  for (const studente of filtered) {
+    const row = tableBody.insertRow();
+
+    const cellId = row.insertCell(0);
+    cellId.className = 'id-col';
+    const idInput = document.createElement('input');
+    idInput.type = 'number';
+    idInput.value = studente.id ?? '';
+    idInput.style.textAlign = 'center';
+    idInput.addEventListener('change', (e) => {
+      const num = Number(e.target.value);
+      if (e.target.value === '' || isNaN(num)) {
+        e.target.value = studente.id ?? '';
+        return;
+      }
+      studente.id = num;
+    });
+    cellId.appendChild(idInput);
+
+    const campi = ['cognome', 'nome', 'classe', 'room', 'percorso', 'gruppo'];
+    campi.forEach((campo, idx) => {
+      const cell = row.insertCell(idx + 1);
+      if (['classe', 'room', 'percorso', 'gruppo'].includes(campo)) {
+        cell.className = `${campo}-col`;
+      }
+      const inp = document.createElement('input');
+      inp.type = 'text';
+      inp.value = studente[campo] ?? '';
+      inp.addEventListener('change', (e) => {
+        studente[campo] = e.target.value;
+      });
+      cell.appendChild(inp);
+    });
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────
+   EXPORT
+   ───────────────────────────────────────────────────────────── */
+function exportToJSON() {
+  const puliti = studenti.map(s => {
+    const o = { id: s.id };
+    if (s.cognome)  o.cognome  = s.cognome;
+    if (s.nome)     o.nome     = s.nome;
+    if (s.classe)   o.classe   = s.classe;
+    if (s.room)     o.room     = s.room;
+    if (s.percorso) o.percorso = s.percorso;
+    if (s.gruppo)   o.gruppo   = s.gruppo;
+    return o;
+  });
+
+  const blob = new Blob([JSON.stringify(puliti, null, 2)], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url;
+  a.download = 'studenti.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  statusMsg.innerText = `📁 Esportati ${studenti.length} studenti in "studenti.json"`;
+}
+
+function exportToJS() {
+  const righe = studenti.map(s => {
+    const o = { id: s.id };
+    if (s.cognome)  o.cognome  = s.cognome;
+    if (s.nome)     o.nome     = s.nome;
+    if (s.classe)   o.classe   = s.classe;
+    if (s.room)     o.room     = s.room;
+    if (s.percorso) o.percorso = s.percorso;
+    if (s.gruppo)   o.gruppo   = s.gruppo;
+    return '    ' + JSON.stringify(o);
+  });
+
+  const content =
+`/**
+ * File generato da gestione studenti.html
+ * Data: ${new Date().toLocaleString('it-IT')}
+ * Studenti: ${studenti.length}
+ */
+window.tuttiStudenti = [
+${righe.join(',\n')}
+];
+`;
+
+  const blob = new Blob([content], { type: 'text/javascript;charset=utf-8' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url;
+  a.download = 'studenti_26.js';
+  a.click();
+  URL.revokeObjectURL(url);
+  statusMsg.innerText = `📜 Esportati ${studenti.length} studenti in "studenti_26.js"`;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   TEMPLATE EXCEL
+   ───────────────────────────────────────────────────────────── */
+function generaTemplateStudenti() {
+  const wb = XLSX.utils.book_new();
+
+  const righe = [
+    ['ID', 'Cognome', 'Nome', 'Classe', 'Room', 'Percorso', 'Gruppo'],
+    [101, 'ROSSI',   'Mario', '3A', '210', '🍴', 'G1'],
+    [102, 'BIANCHI', 'Luca',  '3A', '211', '🍷', 'G2'],
+    [103, 'VERDI',   'Anna',  '3B', '212', '🍴', 'G1']
+  ];
+
+  const ws = XLSX.utils.aoa_to_sheet(righe);
+  ws['!cols'] = righe[0].map(h => ({ wch: Math.max(14, String(h).length + 4) }));
+  XLSX.utils.book_append_sheet(wb, ws, 'Studenti');
+  XLSX.writeFile(wb, 'template_studenti.xlsx');
+
+  statusMsg.innerText = '⬇️ Template studenti scaricato (template_studenti.xlsx).';
+}
+
+/* ─────────────────────────────────────────────────────────────
+   EVENTI
+   ───────────────────────────────────────────────────────────── */
+templateBtn.addEventListener('click', generaTemplateStudenti);
+
+loadBtn.addEventListener('click', () => {
+  if (!fileInput.files.length) {
+    statusMsg.innerText = '⚠️ Seleziona un file prima di caricare.';
+    return;
+  }
+  loadFile(fileInput.files[0]);
+});
+
+fileInput.addEventListener('change', () => {
+  if (fileInput.files.length) loadFile(fileInput.files[0]);
+});
+
+// Drag & drop
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  dropZone.classList.add('dragover');
+});
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  dropZone.classList.remove('dragover');
+  if (e.dataTransfer.files.length) loadFile(e.dataTransfer.files[0]);
+});
+
+searchInput.addEventListener('input', applyFilter);
+exportJsonBtn.addEventListener('click', exportToJSON);
+exportJsBtn.addEventListener('click', exportToJS);
+
+clearBtn.addEventListener('click', () => {
+  studenti = [];
+  filtered = [];
+  fileInput.value = '';
+  searchInput.value = '';
+  exportJsonBtn.disabled = true;
+  exportJsBtn.disabled = true;
+  renderTable();
+  updateCount();
+  statusMsg.innerText = '📂 Carica un file per cominciare.';
+});
+
+// Ordinamento
+document.querySelectorAll('th.sortable').forEach(th => {
+  th.addEventListener('click', () => {
+    const field = th.getAttribute('data-sort');
+    if (currentSortField === field) {
+      currentSortAsc = !currentSortAsc;
+    } else {
+      currentSortField = field;
+      currentSortAsc = true;
+    }
+    applyFilter();
+  });
+});
+
+// Init
+updateCount();
+</script>
+</body>
+</html>
