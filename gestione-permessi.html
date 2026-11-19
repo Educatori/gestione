@@ -442,9 +442,9 @@ function exportAsJS() {
   STATICHE.forEach(k => {
     js += `window.${k} = ${JSON.stringify(data[k], null, 2)};\n\n`;
   });
-  js += `/* ─── PERSONALI (per Firebase / offline) ─── */\n`;
+    js += `/* ─── PERSONALI (per Firebase / offline) ─── */\n`;
   PERSONALI.forEach(k => {
-    js += `const ${k} = ${JSON.stringify(data[k], null, 2)};\nwindow.${k} = ${k};\n\n`;
+    js += `window.${k} = ${JSON.stringify(data[k], null, 2)};\n\n`;
   });
 
   const blob = new Blob([js], { type: 'text/javascript;charset=utf-8' });
