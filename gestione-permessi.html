@@ -126,12 +126,9 @@
   </div>
 
   <div class="section">
-    <h3>🔄 Cambio Turni Dinner (individuale) <button id="validateOverride" class="small">✔️ Valida</button> <span class="source-badge both">📄 permessi_26_offline.js → ☁️ Firebase</span></h3>
-    <textarea id="overrideTurni" rows="8" placeholder='{"GASPARD": {"1": 2, "2": 2, "3": 2, "4": 2}}'></textarea>
-    <div class="hint">
-      Formato Excel: foglio <code>OVERRIDE_TURNI_DINNER</code> → Cognome | 1 | 2 | 3 | 4 | 5.<br>
-      <b>In online va caricato su Firebase</b> (<code>overrides_turni_dinner</code>), <b>in offline</b> in <code>permessi_26_offline.js</code>.
-    </div>
+    <h3>📅 Calendario Laboratori Dinner <button id="validateCalendario" class="small">✔️ Valida</button> <span class="source-badge static">📄 config-static.js</span></h3>
+    <textarea id="calendarioGruppi" rows="8" placeholder='{"10/09/2026": "gr1"}'></textarea>
+    <div class="hint">Formato Excel: foglio <code>CALENDARIO_GRUPPI_DINNER</code> → Data | Gruppo. Va in <code>config-static.js</code>.</div>
   </div>
 
   <div class="section">
@@ -140,6 +137,15 @@
     <div class="hint">Formato Excel: foglio <code>OVERRIDE_TURNI_DINNER_CLASSI</code> → Classe | 1 | 2 | 3 | 4 | 5. Va in <code>config-static.js</code>.</div>
   </div>
 
+  <div class="section">
+    <h3>🔄 Cambio Turni Dinner (individuale) <button id="validateOverride" class="small">✔️ Valida</button> <span class="source-badge both">📄 permessi_26_offline.js → ☁️ Firebase</span></h3>
+    <textarea id="overrideTurni" rows="8" placeholder='{"GASPARD": {"1": 2, "2": 2, "3": 2, "4": 2}}'></textarea>
+    <div class="hint">
+      Formato Excel: foglio <code>OVERRIDE_TURNI_DINNER</code> → Cognome | 1 | 2 | 3 | 4 | 5.<br>
+      <b>In online va caricato su Firebase</b> (<code>overrides_turni_dinner</code>), <b>in offline</b> in <code>permessi_26_offline.js</code>.
+    </div>
+  </div>
+  
   <div class="section">
     <h3>🔑 Orari Permessi Permanenti <button id="validateOrari" class="small">✔️ Valida</button> <span class="source-badge both">📄 permessi_26_offline.js → ☁️ Firebase</span></h3>
     <textarea id="orariPP" rows="12" placeholder='{"ROSSI": {"1": {"out":"12:00","in":"20:45"}}}'></textarea>
@@ -154,11 +160,7 @@
       <b>In online va su Firebase</b> (<code>assenti_permesso</code>).</div>
   </div>
 
-  <div class="section">
-    <h3>📅 Calendario Laboratori Dinner <button id="validateCalendario" class="small">✔️ Valida</button> <span class="source-badge static">📄 config-static.js</span></h3>
-    <textarea id="calendarioGruppi" rows="8" placeholder='{"10/09/2026": "gr1"}'></textarea>
-    <div class="hint">Formato Excel: foglio <code>CALENDARIO_GRUPPI_DINNER</code> → Data | Gruppo. Va in <code>config-static.js</code>.</div>
-  </div>
+  
 
   <div class="footer">
     <span id="statusMsg" class="status"></span>
