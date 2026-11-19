@@ -5,9 +5,9 @@
   <title>Gestione Permessi - Turni, Orari, Assenze</title>
   <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
   <!-- ===== FAVICON ===== -->
-<link rel="icon" href="icon-192.png" sizes="192x192" type="image/png">
-<link rel="icon" href="favicon.ico" sizes="any" type="image/x-icon">
-<link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="icon" href="icon-192.png" sizes="192x192" type="image/png">
+  <link rel="icon" href="favicon.ico" sizes="any" type="image/x-icon">
+  <link rel="apple-touch-icon" href="icon-192.png">
   <style>
     * { box-sizing: border-box; }
     body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 20px; background: #f0f2f5; }
@@ -21,15 +21,18 @@
     .toolbar button:hover { filter: brightness(1.1); }
 
     /* Colori tasti (coerenti con gestione studenti.html) */
-    .btn-template { background: #28a745; }   /* verde */
+    .btn-template { background: #28a745; }
     .btn-template:hover { background: #218838; }
-    .btn-load     { background: #0078d4; }   /* azzurro */
+    .btn-load     { background: #0078d4; }
     .btn-load:hover { background: #005a9e; }
-    .btn-json     { background: #6c757d; }   /* grigio */
+    .btn-merge    { background: #6f42c1; }
+    .btn-merge:hover { background: #5a34a3; }
+    .btn-merge:disabled { background: #bbb; cursor: not-allowed; }
+    .btn-json     { background: #6c757d; }
     .btn-json:hover { background: #5a6268; }
-    .btn-js       { background: #e07c00; }   /* arancio */
+    .btn-js       { background: #e07c00; }
     .btn-js:hover { background: #bb6801; }
-    .btn-clear    { background: #dc3545; }   /* rosso */
+    .btn-clear    { background: #dc3545; }
     .btn-clear:hover { background: #bd2130; }
 
     .section { background: #fefefe; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 20px; padding: 15px; }
@@ -44,6 +47,37 @@
     .hint { font-size: 12px; color: #666; margin-top: 4px; font-style: italic; }
     .info-excel { background: #eef7ff; border-left: 4px solid #0078d4; padding: 10px 14px; border-radius: 6px; margin-bottom: 15px; font-size: 0.85rem; }
     .info-excel code { background: #dceefb; padding: 1px 5px; border-radius: 3px; }
+
+    /* ─── BADGE SORGENTE DATI ─────────────────────────────── */
+    .source-badge {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 10px;
+      margin-left: 8px;
+      vertical-align: middle;
+      letter-spacing: 0.02em;
+    }
+    .source-badge.static   { background: #eef7ff; color: #0078d4; border: 1px solid #b8d8f5; }
+    .source-badge.personal { background: #fff3cd; color: #856404; border: 1px solid #f5d97a; }
+    .source-badge.both     { background: #e8f5e9; color: #1b5e20; border: 1px solid #a5d6a7; }
+
+    /* ─── BANNER DI STATO CARICAMENTO ─────────────────────── */
+    #loadStatus {
+      display: none;
+      margin-bottom: 15px;
+      padding: 10px 14px;
+      border-radius: 6px;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    #loadStatus.success { display: block; background: #d4edda; color: #155724; border-left: 4px solid #28a745; }
+    #loadStatus.warn    { display: block; background: #fff3cd; color: #856404; border-left: 4px solid #ffc107; }
+    #loadStatus.error   { display: block; background: #f8d7da; color: #721c24; border-left: 4px solid #dc3545; }
+    #loadStatus ul { margin: 6px 0 0 20px; padding: 0; }
+    #loadStatus li { margin: 2px 0; }
+    #loadStatus code { background: rgba(0,0,0,0.08); padding: 1px 5px; border-radius: 3px; }
   </style>
 </head>
 <body>
@@ -61,35 +95,38 @@
     <code>ORARI_PP</code>, <code>ASSENTI_PERMESSO</code>, <code>CALENDARIO_GRUPPI_DINNER</code>.
   </div>
 
+  <div id="loadStatus" role="status" aria-live="polite"></div>
+
   <div class="toolbar">
     <button id="templateBtn" class="btn-template" title="Scarica un file .xlsx con un foglio per ogni struttura">⬇️ Template</button>
     <input type="file" id="fileInput" accept=".xlsx,.xls,.json,.js" />
     <button id="loadBtn" class="btn-load">📂 Carica file</button>
+    <button id="mergeBtn" class="btn-merge" title="Carica un secondo file e unisci le strutture mancanti">➕ Carica secondo file</button>
     <button id="exportJsonBtn" class="btn-json">💾 Esporta JSON</button>
     <button id="exportJsBtn" class="btn-js">📜 Esporta JS</button>
     <button id="clearBtn" class="btn-clear">🗑️ Pulisci</button>
   </div>
 
   <div class="section">
-    <h3>🥗 Laboratori Pranzo <button id="validateLabPranzo" class="small">✔️ Valida</button></h3>
+    <h3>🥗 Laboratori Pranzo <button id="validateLabPranzo" class="small">✔️ Valida</button> <span class="source-badge static">📄 config-static.js</span></h3>
     <textarea id="labPranzo" rows="4" placeholder='{"1": ["3A","5A","5B"], "2": [...]}'></textarea>
     <div class="hint">Formato Excel: foglio <code>LAB_PRANZO</code> → Turno | Classi (separate da virgola)</div>
   </div>
 
   <div class="section">
-    <h3>🍽 Turni Dinner <button id="validateTurniDinner" class="small">✔️ Valida</button></h3>
+    <h3>🍽 Turni Dinner <button id="validateTurniDinner" class="small">✔️ Valida</button> <span class="source-badge static">📄 config-static.js</span></h3>
     <textarea id="turniDinner" rows="4" placeholder='{"1": ["1A","1B"], "2": [...]}'></textarea>
     <div class="hint">Formato Excel: foglio <code>TURNI_DINNER</code> → Turno | Classi</div>
   </div>
 
   <div class="section">
-    <h3>🍽 Laboratori Dinner <button id="validateLabDinner" class="small">✔️ Valida</button></h3>
+    <h3>🍽 Laboratori Dinner <button id="validateLabDinner" class="small">✔️ Valida</button> <span class="source-badge static">📄 config-static.js</span></h3>
     <textarea id="labDinner" rows="4" placeholder='{"1": ["2P"], "2": ["2A"]}'></textarea>
     <div class="hint">Formato Excel: foglio <code>LAB_DINNER</code> → Turno | Classi</div>
   </div>
 
   <div class="section">
-    <h3>🔄 Cambio Turni Dinner (individuale) <button id="validateOverride" class="small">✔️ Valida</button></h3>
+    <h3>🔄 Cambio Turni Dinner (individuale) <button id="validateOverride" class="small">✔️ Valida</button> <span class="source-badge both">📄 permessi_26_offline.js → ☁️ Firebase</span></h3>
     <textarea id="overrideTurni" rows="8" placeholder='{"GASPARD": {"1": 2, "2": 2, "3": 2, "4": 2}}'></textarea>
     <div class="hint">
       Formato Excel: foglio <code>OVERRIDE_TURNI_DINNER</code> → Cognome | 1 | 2 | 3 | 4 | 5.<br>
@@ -98,27 +135,27 @@
   </div>
 
   <div class="section">
-    <h3>🔄 Cambio Turni Dinner per classe <button id="validateOverrideClassi" class="small">✔️ Valida</button></h3>
+    <h3>🔄 Cambio Turni Dinner per classe <button id="validateOverrideClassi" class="small">✔️ Valida</button> <span class="source-badge static">📄 config-static.js</span></h3>
     <textarea id="overrideTurniClassi" rows="4" placeholder='{"1A": {"3": 2}, "1B": {"3": 2}}'></textarea>
     <div class="hint">Formato Excel: foglio <code>OVERRIDE_TURNI_DINNER_CLASSI</code> → Classe | 1 | 2 | 3 | 4 | 5. Va in <code>config-static.js</code>.</div>
   </div>
 
   <div class="section">
-    <h3>🔑 Orari Permessi Permanenti <button id="validateOrari" class="small">✔️ Valida</button></h3>
+    <h3>🔑 Orari Permessi Permanenti <button id="validateOrari" class="small">✔️ Valida</button> <span class="source-badge both">📄 permessi_26_offline.js → ☁️ Firebase</span></h3>
     <textarea id="orariPP" rows="12" placeholder='{"ROSSI": {"1": {"out":"12:00","in":"20:45"}}}'></textarea>
     <div class="hint">Formato Excel: foglio <code>ORARI_PP</code> → Cognome | Giorno | Out | In (una riga per giorno).<br>
       <b>In online va su Firebase</b> (<code>permessi_pp</code>).</div>
   </div>
 
   <div class="section">
-    <h3>🚫 Assenti con Permesso <button id="validateAssenti" class="small">✔️ Valida</button></h3>
+    <h3>🚫 Assenti con Permesso <button id="validateAssenti" class="small">✔️ Valida</button> <span class="source-badge both">📄 permessi_26_offline.js → ☁️ Firebase</span></h3>
     <textarea id="assentiPermesso" rows="6" placeholder='{"1": ["ROSSI","BIANCHI"], "2": ["VERDI"]}'></textarea>
     <div class="hint">Formato Excel: foglio <code>ASSENTI_PERMESSO</code> → Giorno | Cognomi (separati da virgola).<br>
       <b>In online va su Firebase</b> (<code>assenti_permesso</code>).</div>
   </div>
 
   <div class="section">
-    <h3>📅 Calendario Laboratori Dinner <button id="validateCalendario" class="small">✔️ Valida</button></h3>
+    <h3>📅 Calendario Laboratori Dinner <button id="validateCalendario" class="small">✔️ Valida</button> <span class="source-badge static">📄 config-static.js</span></h3>
     <textarea id="calendarioGruppi" rows="8" placeholder='{"10/09/2026": "gr1"}'></textarea>
     <div class="hint">Formato Excel: foglio <code>CALENDARIO_GRUPPI_DINNER</code> → Data | Gruppo. Va in <code>config-static.js</code>.</div>
   </div>
@@ -143,12 +180,24 @@ const sections = {
   calendarioGruppi:     'CALENDARIO_GRUPPI_DINNER'
 };
 
+const STATICHE  = ['LAB_PRANZO','TURNI_DINNER','LAB_DINNER','OVERRIDE_TURNI_DINNER_CLASSI','CALENDARIO_GRUPPI_DINNER'];
+const PERSONALI = ['OVERRIDE_TURNI_DINNER','ORARI_PP','ASSENTI_PERMESSO'];
+
 function showStatus(msg, type = 'success') {
   const el = document.getElementById('statusMsg');
   el.textContent = msg;
   el.className = `status ${type}`;
   clearTimeout(showStatus._t);
   showStatus._t = setTimeout(() => { el.className = 'status'; }, 5000);
+}
+
+function aggiornaBannerStato(html, tipo) {
+  const el = document.getElementById('loadStatus');
+  if (!el) return;
+  if (!html) { el.className = ''; el.innerHTML = ''; el.style.display = 'none'; return; }
+  el.className = tipo || 'success';
+  el.innerHTML = html;
+  el.style.display = 'block';
 }
 
 /* ────────────────────────────────────────────────────────────
@@ -258,66 +307,166 @@ function parseCalendario(headers, rows) {
 }
 
 /* ────────────────────────────────────────────────────────────
-   IMPORTA EXCEL (multi-foglio)
+   IMPORTA EXCEL (multi-foglio) — usato sia da load che da merge
    ──────────────────────────────────────────────────────────── */
-function loadExcelFile(file) {
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    try {
-      const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
-      const fogliRiconosciuti = [];
-      const fogliIgnorati = [];
+const MAP_FOGLI = {
+  'lab_pranzo':                    'labPranzo',
+  'turni_dinner':                  'turniDinner',
+  'lab_dinner':                    'labDinner',
+  'override_turni_dinner':         'overrideTurni',
+  'override_turni_dinner_classi':  'overrideTurniClassi',
+  'orari_pp':                      'orariPP',
+  'assenti_permesso':              'assentiPermesso',
+  'calendario_gruppi_dinner':      'calendarioGruppi'
+};
 
-      const MAP = {
-        'lab_pranzo':                    'labPranzo',
-        'turni_dinner':                  'turniDinner',
-        'lab_dinner':                    'labDinner',
-        'override_turni_dinner':         'overrideTurni',
-        'override_turni_dinner_classi':  'overrideTurniClassi',
-        'orari_pp':                      'orariPP',
-        'assenti_permesso':              'assentiPermesso',
-        'calendario_gruppi_dinner':      'calendarioGruppi'
-      };
+function parseWorkbook(wb) {
+  const parsed = {};
+  const fogliRiconosciuti = [];
+  const fogliIgnorati = [];
 
-      for (const sheetName of wb.SheetNames) {
-        const key = normKey(sheetName);
-        const textareaId = MAP[key];
-        if (!textareaId) { fogliIgnorati.push(sheetName); continue; }
+  for (const sheetName of wb.SheetNames) {
+    const key = normKey(sheetName);
+    const textareaId = MAP_FOGLI[key];
+    if (!textareaId) { fogliIgnorati.push(sheetName); continue; }
 
-        const sheet = wb.Sheets[sheetName];
-        const righe = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
-        if (righe.length < 2) { fogliIgnorati.push(sheetName + ' (vuoto)'); continue; }
+    const sheet = wb.Sheets[sheetName];
+    const righe = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+    if (righe.length < 2) { fogliIgnorati.push(sheetName + ' (vuoto)'); continue; }
 
-        const headers = righe[0].map(h => String(h || ''));
-        const rows = righe.slice(1).filter(r => r.some(v => v !== '' && v != null));
+    const headers = righe[0].map(h => String(h || ''));
+    const rows = righe.slice(1).filter(r => r.some(v => v !== '' && v != null));
 
-        let parsed = null;
-        if (['lab_pranzo','turni_dinner','lab_dinner'].includes(key)) {
-          parsed = parseTurnoClassi(headers, rows);
-        } else if (['override_turni_dinner','override_turni_dinner_classi'].includes(key)) {
-          parsed = parseOverrideGiorni(headers, rows);
-        } else if (key === 'orari_pp') {
-          parsed = parseOrariPP(headers, rows);
-        } else if (key === 'assenti_permesso') {
-          parsed = parseAssenti(headers, rows);
-        } else if (key === 'calendario_gruppi_dinner') {
-          parsed = parseCalendario(headers, rows);
-        }
-
-        document.getElementById(textareaId).value = JSON.stringify(parsed, null, 2);
-        fogliRiconosciuti.push(sheetName);
-      }
-
-      let msg = `✅ Importati ${fogliRiconosciuti.length} fogli: ${fogliRiconosciuti.join(', ')}.`;
-      if (fogliIgnorati.length) msg += ` — ignorati: ${fogliIgnorati.join(', ')}.`;
-      showStatus(msg, 'success');
-
-    } catch (err) {
-      console.error(err);
-      showStatus(`❌ Errore lettura Excel: ${err.message}`, 'error');
+    let result = null;
+    if (['lab_pranzo','turni_dinner','lab_dinner'].includes(key)) {
+      result = parseTurnoClassi(headers, rows);
+    } else if (['override_turni_dinner','override_turni_dinner_classi'].includes(key)) {
+      result = parseOverrideGiorni(headers, rows);
+    } else if (key === 'orari_pp') {
+      result = parseOrariPP(headers, rows);
+    } else if (key === 'assenti_permesso') {
+      result = parseAssenti(headers, rows);
+    } else if (key === 'calendario_gruppi_dinner') {
+      result = parseCalendario(headers, rows);
     }
-  };
-  reader.readAsArrayBuffer(file);
+
+    parsed[sections[textareaId]] = result;
+    fogliRiconosciuti.push(sheetName);
+  }
+
+  return { parsed, fogliRiconosciuti, fogliIgnorati };
+}
+
+/* ────────────────────────────────────────────────────────────
+   LOADER UNIFICATO (JSON / JS / EXCEL) — con messaggio sorgente
+   ──────────────────────────────────────────────────────────── */
+function loadDataIntoUI(data, fileName) {
+  const caricate = [];
+  const mancantiStatiche = [];
+  const mancantiPersonali = [];
+
+  for (const [id, key] of Object.entries(sections)) {
+    if (data[key] !== undefined) {
+      document.getElementById(id).value = JSON.stringify(data[key], null, 2);
+      caricate.push(key);
+    } else if (STATICHE.includes(key)) {
+      mancantiStatiche.push(key);
+    } else if (PERSONALI.includes(key)) {
+      mancantiPersonali.push(key);
+    }
+  }
+
+  if (caricate.length === 0) {
+    aggiornaBannerStato(
+      `⚠️ Nessuna struttura riconosciuta nel file <code>${fileName || ''}</code>. ` +
+      `Attese: <code>window.KEY = {...}</code> o <code>const KEY = {...}</code>.`,
+      'warn'
+    );
+    showStatus('⚠️ Nessuna struttura riconosciuta nel file.', 'warn');
+    return;
+  }
+
+  let html = `<b>✅ Caricate ${caricate.length} strutture</b> da <code>${fileName || 'file'}</code>.`;
+
+  if (mancantiStatiche.length > 0 || mancantiPersonali.length > 0) {
+    html += `<br>ℹ️ Strutture non presenti in questo file:`;
+    html += `<ul>`;
+    if (mancantiStatiche.length > 0) {
+      html += `<li><b>${mancantiStatiche.length} statiche</b> (in <code>config-static.js</code>): ` +
+              mancantiStatiche.map(k => `<code>${k}</code>`).join(', ') + `</li>`;
+    }
+    if (mancantiPersonali.length > 0) {
+      html += `<li><b>${mancantiPersonali.length} personali</b> (in <code>permessi_26_offline.js</code> o su Firebase): ` +
+              mancantiPersonali.map(k => `<code>${k}</code>`).join(', ') + `</li>`;
+    }
+    html += `</ul>`;
+    html += `<div style="margin-top:8px;font-size:12px;opacity:0.85;">` +
+            `Usa <b>➕ Carica secondo file</b> per aggiungere le strutture mancanti senza sovrascrivere quelle già caricate.` +
+            `</div>`;
+    aggiornaBannerStato(html, 'warn');
+    showStatus(`⚠️ Caricate ${caricate.length}/8 strutture. Mancano ${mancantiStatiche.length + mancantiPersonali.length}.`, 'warn');
+  } else {
+    html += ` <b>Tutte le 8 strutture sono presenti.</b>`;
+    aggiornaBannerStato(html, 'success');
+    showStatus(`✅ Caricate tutte le 8 strutture da "${fileName || 'file'}".`, 'success');
+  }
+}
+
+/* ────────────────────────────────────────────────────────────
+   MERGE: unisce un secondo file alle strutture già caricate.
+   Non sovrascrive le sezioni già popolate.
+   ──────────────────────────────────────────────────────────── */
+function mergeDataIntoUI(data, fileName) {
+  const aggiunte = [];
+  const giaPresenti = [];
+
+  for (const [id, key] of Object.entries(sections)) {
+    if (data[key] === undefined) continue;
+
+    const ta = document.getElementById(id);
+    const valoreAttuale = (ta.value || '').trim();
+    const vuoto = valoreAttuale === '' || valoreAttuale === '{}' || valoreAttuale === '[]';
+
+    if (vuoto) {
+      ta.value = JSON.stringify(data[key], null, 2);
+      aggiunte.push(key);
+    } else {
+      giaPresenti.push(key);
+    }
+  }
+
+  if (aggiunte.length === 0 && giaPresenti.length === 0) {
+    aggiornaBannerStato(
+      `⚠️ Nessuna struttura riconosciuta in <code>${fileName || 'file'}</code>.`,
+      'warn'
+    );
+    return;
+  }
+
+  let html = `<b>🔀 Merge completato</b> da <code>${fileName || 'file'}</code>.`;
+  if (aggiunte.length > 0) {
+    html += `<br>✅ <b>Aggiunte ${aggiunte.length} strutture:</b> ` +
+            aggiunte.map(k => `<code>${k}</code>`).join(', ');
+  }
+  if (giaPresenti.length > 0) {
+    html += `<br>⏭️ <b>Già presenti (non sovrascritte):</b> ` +
+            giaPresenti.map(k => `<code>${k}</code>`).join(', ');
+  }
+
+  const popolate = Object.entries(sections).filter(([id]) => {
+    const v = (document.getElementById(id).value || '').trim();
+    return v !== '' && v !== '{}' && v !== '[]';
+  }).length;
+
+  if (popolate === 8) {
+    html += `<br><b>🎉 Tutte le 8 strutture sono ora popolate.</b>`;
+    aggiornaBannerStato(html, 'success');
+    showStatus('✅ Merge completato: tutte le 8 strutture presenti.', 'success');
+  } else {
+    html += `<br>ℹ️ Sezioni popolate: <b>${popolate}/8</b>.`;
+    aggiornaBannerStato(html, 'warn');
+    showStatus(`🔀 Merge completato. Sezioni popolate: ${popolate}/8.`, 'warn');
+  }
 }
 
 /* ────────────────────────────────────────────────────────────
@@ -359,61 +508,44 @@ function parsePermessiJS(content) {
 }
 
 /* ────────────────────────────────────────────────────────────
-   LOADER UNIFICATO (JSON / JS / EXCEL)
+   DISPATCH FILE (JSON / JS / EXCEL) — usato da load e merge
    ──────────────────────────────────────────────────────────── */
-function loadDataIntoUI(data) {
-  let count = 0;
-  for (const [id, key] of Object.entries(sections)) {
-    if (data[key] !== undefined) {
-      document.getElementById(id).value = JSON.stringify(data[key], null, 2);
-      count++;
-    }
-  }
-  if (count === 0) {
-    showStatus('⚠️ Nessuna struttura riconosciuta nel file.', 'warn');
-  } else {
-    showStatus(`✅ Caricate ${count} strutture da file.`, 'success');
-  }
-}
-
-function loadAnyFile(file) {
+function readFileAsData(file, callback) {
   const ext = file.name.toLowerCase().split('.').pop();
+  const reader = new FileReader();
 
-  if (ext === 'json') {
-    showStatus(`⏳ Lettura di "${file.name}"…`, 'warn');
-    const reader = new FileReader();
+  if (ext === 'json' || ext === 'js') {
     reader.onload = (e) => {
       try {
-        const data = JSON.parse(e.target.result);
-        loadDataIntoUI(data);
-      } catch (err) {
-        showStatus(`❌ JSON non valido: ${err.message}`, 'error');
-      }
-    };
-    reader.readAsText(file);
-    return;
-  }
-
-  if (ext === 'js') {
-    showStatus(`⏳ Lettura di "${file.name}"…`, 'warn');
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const data = parsePermessiJS(e.target.result);
-        if (Object.keys(data).length === 0) {
+        const data = (ext === 'json')
+          ? JSON.parse(e.target.result)
+          : parsePermessiJS(e.target.result);
+        if (!data || Object.keys(data).length === 0) {
           throw new Error('Nessuna struttura riconosciuta (attese "window.KEY = {...}" o "const KEY = {...}").');
         }
-        loadDataIntoUI(data);
+        callback(null, data, file.name);
       } catch (err) {
-        showStatus(`❌ Errore JS: ${err.message}`, 'error');
+        callback(err, null, file.name);
       }
     };
     reader.readAsText(file);
     return;
   }
 
-  showStatus(`⏳ Lettura di "${file.name}"…`, 'warn');
-  loadExcelFile(file);
+  // Excel
+  reader.onload = (e) => {
+    try {
+      const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+      const { parsed } = parseWorkbook(wb);
+      if (Object.keys(parsed).length === 0) {
+        throw new Error('Nessun foglio riconosciuto nel file Excel.');
+      }
+      callback(null, parsed, file.name);
+    } catch (err) {
+      callback(err, null, file.name);
+    }
+  };
+  reader.readAsArrayBuffer(file);
 }
 
 /* ────────────────────────────────────────────────────────────
@@ -435,14 +567,11 @@ function exportAsJS() {
   if (!data) return;
   let js = `/**\n * Configurazioni permessi - generato da gestione permessi.html\n * Data: ${new Date().toLocaleString('it-IT')}\n */\n\n`;
 
-  const STATICHE = ['LAB_PRANZO','TURNI_DINNER','LAB_DINNER','OVERRIDE_TURNI_DINNER_CLASSI','CALENDARIO_GRUPPI_DINNER'];
-  const PERSONALI = ['OVERRIDE_TURNI_DINNER','ORARI_PP','ASSENTI_PERMESSO'];
-
   js += `/* ─── STATICHE (per js/core/config-static.js) ─── */\n`;
   STATICHE.forEach(k => {
     js += `window.${k} = ${JSON.stringify(data[k], null, 2)};\n\n`;
   });
-    js += `/* ─── PERSONALI (per Firebase / offline) ─── */\n`;
+  js += `/* ─── PERSONALI (per Firebase / offline) ─── */\n`;
   PERSONALI.forEach(k => {
     js += `window.${k} = ${JSON.stringify(data[k], null, 2)};\n\n`;
   });
@@ -546,13 +675,56 @@ function addValidator(textareaId, sectionName, buttonId) {
    ──────────────────────────────────────────────────────────── */
 document.getElementById('templateBtn').addEventListener('click', generaTemplatePermessi);
 
+/* Carica file (sostituisce tutto) */
 document.getElementById('loadBtn').addEventListener('click', () => {
   const f = document.getElementById('fileInput').files[0];
   if (!f) { showStatus('⚠️ Seleziona un file prima di caricare.', 'warn'); return; }
-  loadAnyFile(f);
+  readFileAsData(f, (err, data, name) => {
+    if (err) {
+      aggiornaBannerStato(`❌ Errore lettura <code>${name}</code>: ${err.message}`, 'error');
+      showStatus(`❌ Errore: ${err.message}`, 'error');
+      return;
+    }
+    loadDataIntoUI(data, name);
+  });
 });
+
 document.getElementById('fileInput').addEventListener('change', (e) => {
-  if (e.target.files[0]) loadAnyFile(e.target.files[0]);
+  const f = e.target.files[0];
+  if (!f) return;
+  readFileAsData(f, (err, data, name) => {
+    if (err) {
+      aggiornaBannerStato(`❌ Errore lettura <code>${name}</code>: ${err.message}`, 'error');
+      showStatus(`❌ Errore: ${err.message}`, 'error');
+      return;
+    }
+    loadDataIntoUI(data, name);
+  });
+});
+
+/* Carica secondo file (merge) */
+const mergeInput = document.createElement('input');
+mergeInput.type = 'file';
+mergeInput.accept = '.xlsx,.xls,.json,.js';
+mergeInput.style.display = 'none';
+document.body.appendChild(mergeInput);
+
+document.getElementById('mergeBtn').addEventListener('click', () => {
+  mergeInput.click();
+});
+
+mergeInput.addEventListener('change', (e) => {
+  const f = e.target.files[0];
+  if (!f) return;
+  mergeInput.value = ''; // reset per permettere di ricaricare lo stesso file
+  readFileAsData(f, (err, data, name) => {
+    if (err) {
+      aggiornaBannerStato(`❌ Errore merge da <code>${name}</code>: ${err.message}`, 'error');
+      showStatus(`❌ Errore merge: ${err.message}`, 'error');
+      return;
+    }
+    mergeDataIntoUI(data, name);
+  });
 });
 
 document.getElementById('exportJsonBtn').addEventListener('click', exportAsJSON);
@@ -561,6 +733,7 @@ document.getElementById('exportJsBtn').addEventListener('click', exportAsJS);
 document.getElementById('clearBtn').addEventListener('click', () => {
   if (!confirm('Svuotare tutte le sezioni?')) return;
   for (const id of Object.keys(sections)) document.getElementById(id).value = '';
+  aggiornaBannerStato(null);
   showStatus('🗑️ Sezioni svuotate.', 'success');
 });
 
